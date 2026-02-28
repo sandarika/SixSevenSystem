@@ -5,13 +5,18 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+// brand colors
+const scarlet = '#e80e0e';
+const cream = '#f4f3ef';
+
+// light mode uses cream background with scarlet tint, dark mode keeps darker base
+const tintColorLight = scarlet;
+const tintColorDark = scarlet;
 
 export const Colors = {
   light: {
     text: '#11181C',
-    background: '#fff',
+    background: cream,
     tint: tintColorLight,
     icon: '#687076',
     tabIconDefault: '#687076',

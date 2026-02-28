@@ -39,6 +39,8 @@ Get out there! 💪 ChallengeU connects UNL students with recreation opportuniti
 
 ChallengeU is the all-in-one app for UNL students looking to stay active and connected. Whether you want to hit the gym, join a pickup game, find your next adventure, or connect with club sports teams, ChallengeU makes it easy.
 
+The current repository includes a frontend scaffold with a login screen and tabbed navigation. Tabs correspond to the major features described below (Activity Hub, Events, Activity Feed, Teams) and are styled in the scarlet‑and‑cream brand palette.
+
 ### Features
 
 🏋️ **Real-Time Activity Hub** - Check the live status and busyness of recreation facilities across campus:
