@@ -1,11 +1,11 @@
-import { StyleSheet, View, TextInput, Button } from 'react-native';
+import { StyleSheet, View, TextInput, TouchableOpacity, Text, Image } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import React, { useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
-import { User, Lock } from 'lucide-react-native';
+import { Mail, Lock } from 'lucide-react-native';
 import { authenticate, isAuthenticated } from '@/utils/auth';
 
 export default function LoginScreen() {
@@ -37,11 +37,14 @@ export default function LoginScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <View style={styles.topWrapper}>
+        <Image source={require('../assets/images/image.png')} style={styles.logo} />
+      </View>
       <ThemedText type="title" style={styles.title}>
         Welcome to ChallengeU
       </ThemedText>
       <View style={styles.inputWrapper}>
-        <User size={24} color="#e80e0e" />
+        <Mail size={24} color="#e80e0e" />
         <TextInput
           placeholder="Email"
           style={styles.input}
@@ -62,7 +65,9 @@ export default function LoginScreen() {
         />
       </View>
       <View style={styles.buttonContainer}>
-        <Button title="Login" color="#e80e0e" onPress={handleLogin} />
+        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+          <Text style={styles.loginButtonText}>Login</Text>
+        </TouchableOpacity>
       </View>
     </ThemedView>
   );
@@ -78,6 +83,18 @@ const styles = StyleSheet.create({
   title: {
     textAlign: 'center',
   },
+  topWrapper: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  logo: {
+    width: 180,
+    height: 180,
+    resizeMode: 'cover',
+    borderRadius: 90,
+    borderWidth: 2,
+    borderColor: '#000',
+  },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -90,8 +107,24 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     padding: 4,
+    textAlign: 'center',
   },
   buttonContainer: {
     marginTop: 24,
+    alignItems: 'center',
+  },
+  loginButton: {
+    backgroundColor: '#e80e0e',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 30,
+    borderWidth: 1,
+    borderColor: '#b00000',
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
