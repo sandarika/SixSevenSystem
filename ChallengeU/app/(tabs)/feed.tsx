@@ -1,8 +1,9 @@
-import { StyleSheet, FlatList, View, TouchableOpacity, Modal, TextInput, Alert, Platform, Image, ScrollView } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Modal,FlatList, TextInput, Alert, Platform, Image, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Activity, Heart, Plus, Camera, MessageCircle, X } from 'lucide-react-native';
+import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useThemeColor } from '@/hooks/use-theme-color';
