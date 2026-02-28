@@ -9,26 +9,29 @@ Get out there! 💪 ChallengeU connects UNL students with recreation opportuniti
 
 ### Prerequisites
 - Node.js (v16 or higher)
-- npm or yarn
-- Expo CLI (`npm install -g expo-cli`)
+- **Expo Go app** (download from [App Store](https://apps.apple.com/app/expo-go/id982107779) or [Google Play](https://play.google.com/store/apps/details?id=host.exp.exponent))
 
 ### Installation & Running
 
-1. Clone or download this repository
+1. Navigate to the ChallengeU folder:
+   ```bash
+   cd ChallengeU
+   ```
+
 2. Install dependencies:
    ```bash
+   npm install -g expo-cli
    npm install
    ```
 
-3. Start the development server:
+3. Start the Expo development server:
    ```bash
-   npm start
+   npx expo start --tunnel
    ```
 
-4. Open on your device:
-   - **iOS (on macOS):** `npm run ios`
-   - **Android:** `npm run android`
-   - **Web:** `npm run web`
+4. **Using Expo Go (Recommended for Development):**
+   - Open the **Expo Go** app on your iOS or Android device
+   - Scan the QR code displayed in your terminal
 
 ---
 
@@ -75,25 +78,25 @@ The current repository includes a frontend scaffold with a login screen and tabb
 ├── package.json        # Dependencies and scripts
 ├── tsconfig.json       # TypeScript configuration
 ├── assets/             # App icons and images
+├── server/             # Node.js backend
+│   └── index.js        # Express server setup
 └── README.md           # This file
 ```
 
 ---
 
-## Available Scripts
-
-- `npm start` - Start the Expo development server
-- `npm run ios` - Build and run on iOS simulator
-- `npm run android` - Build and run on Android emulator
-- `npm run web` - Run on web
-
----
-
 ## Tech Stack
 
-- **Frontend:** React Native with Expo
-- **Language:** TypeScript (ready)
-- **Platforms:** iOS, Android, Web
+**Frontend:**
+- React Native with Expo
+- TypeScript
+- Platforms: iOS, Android, Web
+
+**Backend:**
+- Node.js with Express
+- MongoDB (Mongoose ODM)
+- JWT Authentication
+- REST API
 
 ---
 
