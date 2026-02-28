@@ -1,11 +1,19 @@
-import { StyleSheet, FlatList, View, TouchableOpacity, Modal, TextInput, Alert, Platform, Image } from 'react-native';
+import { StyleSheet, FlatList, View, TouchableOpacity, Modal, TextInput, Alert, Platform, Image, ScrollView } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Activity, Heart, Plus, Camera } from 'lucide-react-native';
+import { Activity, Heart, Plus, Camera, MessageCircle, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+
+type Comment = {
+  _id: string;
+  username: string;
+  text: string;
+  likes: number;
+};
 
 type Workout = {
   _id: string;
@@ -14,20 +22,52 @@ type Workout = {
   date: string;
   likes: number;
   imageUrl?: string;
+  comments?: Comment[];
 };
 
 // Demo Herbie Husker post
 const DEMO_WORKOUT: Workout = {
   _id: 'demo-herbie',
-  username: 'Herbie Husker',
+  username: 'Vittoria',
   calories: 670,
   date: new Date().toISOString(),
-  likes: 3,
+  likes: 0,
   imageUrl: require('../../assets/images/workout0img.png'),
+  comments: [
+    {
+      _id: 'demo-comment-1',
+      username: 'Lucy',
+      text: 'Wow!',
+      likes: 0,
+    },
+  ],
 };
+
+ // Demo Lucy post
+ const DEMO_WORKOUT_LUCY: Workout = {
+   _id: 'demo-lucy',
+   username: 'Lucy',
+   calories: 520,
+   date: new Date(Date.now() - 3600000).toISOString(),
+   likes: 2,
+   imageUrl: require('../../assets/images/workout1img.png'),
+   comments: [],
+ };
+
+ // Demo Sandi post
+ const DEMO_WORKOUT_SANDI: Workout = {
+   _id: 'demo-sandi',
+   username: 'Sandi',
+   calories: 450,
+   date: new Date(Date.now() - 7200000).toISOString(),
+   likes: 1,
+   imageUrl: require('../../assets/images/workout2img.png'),
+   comments: [],
+ };
 
 export default function FeedScreen() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [demoComments, setDemoComments] = useState<Comment[]>(DEMO_WORKOUT.comments || []);
   type WorkoutState = { likes: number; liked: boolean };
   const [feedState, setFeedState] = useState<Record<string, WorkoutState>>({});
   const [showModal, setShowModal] = useState(false);
@@ -35,6 +75,13 @@ export default function FeedScreen() {
   const [calories, setCalories] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
+  
+  // Comment state
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
+  const [commentText, setCommentText] = useState('');
+  const [commentUsername, setCommentUsername] = useState('');
+  const [commentLikes, setCommentLikes] = useState<Record<string, Record<string, boolean>>>({});
   const backgroundColor = useThemeColor({}, 'background');
   const colorScheme = useColorScheme() ?? 'light';
   const headerBackgroundColor = { light: '#f4f3ef', dark: '#1D3D47' };
@@ -55,14 +102,27 @@ export default function FeedScreen() {
       if (!res.ok) return;
       const data: Workout[] = await res.json();
       setWorkouts(data);
-      // initialize local state for each workout
-      const state: Record<string, WorkoutState> = {};
-      data.forEach((w) => {
-        state[w._id] = { likes: w.likes, liked: false };
+      // Preserve existing state but initialize new workouts
+      setFeedState((prevState) => {
+        const newState = { ...prevState };
+        data.forEach((w) => {
+          // Only initialize if not already in state (preserves liked status)
+          if (!newState[w._id]) {
+            newState[w._id] = { likes: w.likes, liked: false };
+          }
+        });
+        // Ensure demo post is in state, preserving existing state
+        if (!newState[DEMO_WORKOUT._id]) {
+          newState[DEMO_WORKOUT._id] = { likes: DEMO_WORKOUT.likes, liked: false };
+        }
+          if (!newState[DEMO_WORKOUT_LUCY._id]) {
+            newState[DEMO_WORKOUT_LUCY._id] = { likes: DEMO_WORKOUT_LUCY.likes, liked: false };
+          }
+          if (!newState[DEMO_WORKOUT_SANDI._id]) {
+            newState[DEMO_WORKOUT_SANDI._id] = { likes: DEMO_WORKOUT_SANDI.likes, liked: false };
+          }
+        return newState;
       });
-      // include demo post state as well
-      state[DEMO_WORKOUT._id] = { likes: DEMO_WORKOUT.likes, liked: false };
-      setFeedState(state);
     } catch (e) {
       // ignore network errors for now
     }
@@ -72,6 +132,21 @@ export default function FeedScreen() {
     fetchWorkouts();
     const id = setInterval(fetchWorkouts, 5000);
     return () => clearInterval(id);
+  }, []);
+
+  // Prefill username/commenter from stored Account name on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem('studentName');
+        if (stored) {
+          setUsername(stored);
+          setCommentUsername(stored);
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
   }, []);
 
   const pickImage = async () => {
@@ -116,6 +191,8 @@ export default function FeedScreen() {
     // Add to feed immediately (at the beginning for newest first)
     setWorkouts([newWorkout, ...workouts]);
     setFeedState((prev) => ({ ...prev, [newWorkout._id]: { likes: 0, liked: false } }));
+    // Persist username to storage for next time
+    AsyncStorage.setItem('studentName', newWorkout.username).catch(() => {});
     
     // Reset form and close modal
     setUsername('');
@@ -124,19 +201,135 @@ export default function FeedScreen() {
     setShowModal(false);
   };
 
+  // Open post modal and prefill username from Account storage
+  const openPostModal = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('studentName');
+      if (stored) setUsername(stored);
+    } catch (e) {
+      // ignore
+    }
+    setShowModal(true);
+  };
+
+  // Helper to get the canonical likes count for a workout id
+  const getLikesForId = (id: string) => {
+    const found = workouts.find((w) => w._id === id);
+    if (found) return found.likes ?? 0;
+    if (id === DEMO_WORKOUT._id) return DEMO_WORKOUT.likes ?? 0;
+    if (id === DEMO_WORKOUT_LUCY._id) return DEMO_WORKOUT_LUCY.likes ?? 0;
+    if (id === DEMO_WORKOUT_SANDI._id) return DEMO_WORKOUT_SANDI.likes ?? 0;
+    return 0;
+  };
+
   const celebrateWorkout = (workoutId: string) => {
-    // Get current state or initialize it
-    const existing = feedState[workoutId] || { likes: 0, liked: false };
+    // Use existing feedState if present, otherwise fall back to the workout's canonical likes
+    const existing = feedState[workoutId] ?? { likes: getLikesForId(workoutId), liked: false };
     const isCelebrated = existing.liked;
-    
-    // Calculate new state
+
+    // Calculate new state (don't go below 0)
+    const newLikes = isCelebrated ? Math.max(0, existing.likes - 1) : existing.likes + 1;
+
     const newState: WorkoutState = {
-      likes: isCelebrated ? existing.likes - 1 : existing.likes + 1,
+      likes: newLikes,
       liked: !isCelebrated,
     };
 
     // Update state immediately
     setFeedState((prev) => ({ ...prev, [workoutId]: newState }));
+
+    // Persist the likes count into the workouts array for regular posts so
+    // subsequent baseline reads reflect the change for all users.
+    setWorkouts((prev) =>
+      prev.map((w) => (w._id === workoutId ? { ...w, likes: newLikes } : w))
+    );
+  };
+
+  const addComment = () => {
+    if (!commentUsername.trim() || !commentText.trim()) {
+      Alert.alert('Error', 'Please enter your name and comment');
+      return;
+    }
+
+    if (!selectedWorkoutId) return;
+
+    // Create new comment
+    const newComment: Comment = {
+      _id: `${Date.now()}`,
+      username: commentUsername.trim(),
+      text: commentText.trim(),
+      likes: 0,
+    };
+
+    // Handle demo post separately
+    if (selectedWorkoutId === 'demo-herbie') {
+      setDemoComments([...demoComments, newComment]);
+    } else {
+      // Add comment to regular workout
+      setWorkouts((prev) =>
+        prev.map((w) =>
+          w._id === selectedWorkoutId
+            ? { ...w, comments: [...(w.comments || []), newComment] }
+            : w
+        )
+      );
+    }
+
+    // Reset form
+    setCommentText('');
+    // persist commenter name
+    AsyncStorage.setItem('studentName', newComment.username).catch(() => {});
+    setCommentUsername('');
+  };
+
+  // Open comments modal and prefill commenter name from storage
+  const openCommentsModal = async (workoutId: string) => {
+    try {
+      const stored = await AsyncStorage.getItem('studentName');
+      if (stored) setCommentUsername(stored);
+    } catch (e) {
+      // ignore
+    }
+    setSelectedWorkoutId(workoutId);
+    setShowCommentsModal(true);
+  };
+
+  const toggleCommentLike = (workoutId: string, commentId: string) => {
+    const key = `${workoutId}-${commentId}`;
+    const isLiked = commentLikes[key];
+
+    // Handle demo post separately
+    if (workoutId === 'demo-herbie') {
+      setDemoComments((prev) =>
+        prev.map((c) =>
+          c._id === commentId
+            ? { ...c, likes: isLiked ? c.likes - 1 : c.likes + 1 }
+            : c
+        )
+      );
+    } else {
+      // Update the workout with the new comment likes
+      setWorkouts((prev) =>
+        prev.map((w) =>
+          w._id === workoutId
+            ? {
+                ...w,
+                comments: (w.comments || []).map((c) =>
+                  c._id === commentId
+                    ? { ...c, likes: isLiked ? c.likes - 1 : c.likes + 1 }
+                    : c
+                ),
+              }
+            : w
+        )
+      );
+    }
+
+    // Update like state
+    setCommentLikes((prev) => ({
+      ...prev,
+      [key]: !isLiked,
+    }));
   };
 
   const renderItem = ({ item }: { item: Workout }) => {
@@ -144,6 +337,8 @@ export default function FeedScreen() {
     const itemState = feedState[item._id] || { likes: item.likes, liked: false };
     const likes = itemState.likes;
     const isCelebrated = itemState.liked;
+    // For demo post, use demoComments state; for others, use item comments
+    const comments = item._id === 'demo-herbie' ? demoComments : item.comments || [];
     return (
       <ThemedView style={styles.item}>
         {item.imageUrl && (
@@ -154,20 +349,30 @@ export default function FeedScreen() {
           <ThemedText>{item.calories} Calories</ThemedText>
           <ThemedText style={styles.date}>{date.toLocaleString()}</ThemedText>
         </View>
-        <TouchableOpacity
-          style={[styles.celebrateBtn, isCelebrated && styles.celebrateBtnActive]}
-          onPress={() => celebrateWorkout(item._id)}
-        >
-          <Heart
-            size={18}
-            color="#e80e0e"
-            fill={isCelebrated ? '#e80e0e' : 'none'}
-          />
-          <ThemedText style={styles.celebrateText}>
-            {isCelebrated ? 'Celebrated' : 'Celebrate'}
-          </ThemedText>
-          <ThemedText style={styles.likeCount}>{likes}</ThemedText>
-        </TouchableOpacity>
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.celebrateBtn, isCelebrated && styles.celebrateBtnActive]}
+            onPress={() => celebrateWorkout(item._id)}
+          >
+            <Heart
+              size={18}
+              color="#e80e0e"
+              fill={isCelebrated ? '#e80e0e' : 'none'}
+            />
+            <ThemedText style={styles.celebrateText}>
+              {isCelebrated ? 'Celebrated' : 'Celebrate'}
+            </ThemedText>
+            <ThemedText style={styles.likeCount}>{likes}</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.commentBtn}
+            onPress={() => openCommentsModal(item._id)}
+          >
+            <MessageCircle size={18} color="#e80e0e" />
+            <ThemedText style={styles.commentBtnText}>Comments</ThemedText>
+            <ThemedText style={styles.commentCount}>{comments.length}</ThemedText>
+          </TouchableOpacity>
+        </View>
       </ThemedView>
     );
   };
@@ -186,7 +391,7 @@ export default function FeedScreen() {
   return (
     <ThemedView style={{ flex: 1, position: 'relative' }}>
       <FlatList
-        data={[DEMO_WORKOUT, ...workouts]}
+          data={[...workouts, DEMO_WORKOUT, DEMO_WORKOUT_LUCY, DEMO_WORKOUT_SANDI]}
         keyExtractor={(i) => i._id}
         renderItem={renderItem}
         ListHeaderComponent={<HeaderComponent />}
@@ -194,7 +399,7 @@ export default function FeedScreen() {
         contentContainerStyle={workouts.length === 0 ? styles.emptyContainer : undefined}
       />
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowModal(true)}>
+          <TouchableOpacity style={styles.fab} onPress={openPostModal}>
         <Plus size={28} color="#fff" />
       </TouchableOpacity>
 
@@ -266,6 +471,84 @@ export default function FeedScreen() {
             </TouchableOpacity>
           </ThemedView>
         </View>
+      </Modal>
+
+      <Modal
+        visible={showCommentsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCommentsModal(false)}
+      >
+        <ThemedView style={styles.commentsModalOverlay}>
+          <ThemedView style={styles.commentsModalContent}>
+            <View style={styles.commentsModalHeader}>
+              <ThemedText type="title">Comments</ThemedText>
+              <TouchableOpacity onPress={() => setShowCommentsModal(false)}>
+                <X size={24} color="#e80e0e" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.commentsList}>
+              {selectedWorkoutId && (() => {
+                // Get comments from either demo post or regular post
+                const comments = selectedWorkoutId === 'demo-herbie' 
+                  ? demoComments 
+                  : workouts.find(w => w._id === selectedWorkoutId)?.comments || [];
+                
+                return comments.map((comment) => {
+                  const key = `${selectedWorkoutId}-${comment._id}`;
+                  const isLiked = commentLikes[key];
+                  return (
+                    <View key={comment._id} style={styles.commentItem}>
+                      <View style={styles.commentHeader}>
+                        <ThemedText style={styles.commentUsername}>{comment.username}</ThemedText>
+                        <ThemedText style={styles.commentDate}>now</ThemedText>
+                      </View>
+                      <ThemedText style={styles.commentBody}>{comment.text}</ThemedText>
+                      <TouchableOpacity
+                        style={styles.commentLikeBtn}
+                        onPress={() => toggleCommentLike(selectedWorkoutId, comment._id)}
+                      >
+                        <Heart
+                          size={14}
+                          color="#e80e0e"
+                          fill={isLiked ? '#e80e0e' : 'none'}
+                        />
+                        <ThemedText style={styles.commentLikeText}>
+                          {comment.likes}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                });
+              })()}
+            </ScrollView>
+
+            <View style={styles.commentInputSection}>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Your name"
+                placeholderTextColor="#999"
+                value={commentUsername}
+                onChangeText={setCommentUsername}
+              />
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Add a comment..."
+                placeholderTextColor="#999"
+                value={commentText}
+                onChangeText={setCommentText}
+                multiline
+              />
+              <TouchableOpacity
+                style={styles.addCommentBtn}
+                onPress={addComment}
+              >
+                <ThemedText style={styles.addCommentBtnText}>Post Comment</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </ThemedView>
+        </ThemedView>
       </Modal>
     </ThemedView>
   );
@@ -438,6 +721,142 @@ const styles = StyleSheet.create({
   postBtnText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '700',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  commentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e80e0e',
+    alignSelf: 'flex-start',
+  },
+  commentBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  commentCount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#e80e0e',
+  },
+  commentsPreview: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e6e6e6',
+    gap: 8,
+  },
+  commentPreview: {
+    paddingBottom: 8,
+  },
+  commentAuthor: {
+    fontWeight: '600',
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  commentPreviewText: {
+    fontSize: 13,
+    opacity: 0.8,
+  },
+  commentsModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  commentsModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    maxHeight: '85%',
+  },
+  commentsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  commentsList: {
+    marginBottom: 16,
+    maxHeight: 300,
+  },
+  commentItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  commentUsername: {
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  commentDate: {
+    fontSize: 11,
+    opacity: 0.6,
+  },
+  commentBody: {
+    fontSize: 13,
+    marginBottom: 6,
+    lineHeight: 18,
+  },
+  commentLikeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  commentLikeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#e80e0e',
+  },
+  commentInputSection: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    gap: 8,
+  },
+  commentInput: {
+    borderWidth: 1,
+    borderColor: '#e80e0e',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: '#000',
+    backgroundColor: '#fff',
+  },
+  addCommentBtn: {
+    backgroundColor: '#e80e0e',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  addCommentBtnText: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '700',
   },
 });
