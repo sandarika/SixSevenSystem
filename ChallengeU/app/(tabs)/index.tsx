@@ -134,6 +134,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: '#eee',
     gap: 4,
+    backgroundColor: '#fff',
   },
   graphContainer: {
     flexDirection: 'row',
@@ -143,7 +144,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 4,
     gap: 3,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#ffff',
     borderRadius: 4,
     paddingVertical: 4,
   },
