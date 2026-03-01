@@ -1,7 +1,7 @@
 # ChallengeU - University of Nebraska Lincoln
 *Raikes Hacks 2026*
 
-Get out there! 💪 ChallengeU connects UNL students with recreation opportunities, social events, and fitness communities across campus.
+Get active, Huskers! 💪 ChallengeU connects UNL students with recreation opportunities, social events, and fitness communities across campus, all in one unified platform!
 
 ---
 
