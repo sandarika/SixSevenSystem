@@ -82,7 +82,7 @@ The current repository includes a frontend scaffold with a login screen and tabb
 
 📊 **Activity Feed** - Stay motivated and social:
 - Share your workouts and activities
-- Upload images of your pump
+- Upload an image of your pump, sweat, or gains
 - Follow friends and see what they're up to
 - Celebrate milestones together and comment on workouts
 
