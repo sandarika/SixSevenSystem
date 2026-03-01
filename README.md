@@ -1,7 +1,7 @@
 # ChallengeU - University of Nebraska Lincoln
 *Raikes Hacks 2026*
 
-Get out there! 💪 ChallengeU connects UNL students with recreation opportunities, social events, and fitness communities across campus.
+Get active, Huskers! 💪 ChallengeU connects UNL students with recreation opportunities, social events, and fitness communities across campus, all in one unified platform!
 
 ---
 
@@ -24,7 +24,7 @@ Get out there! 💪 ChallengeU connects UNL students with recreation opportuniti
    npm install
    ```
 
-### Run as iOS Development Build (recommended)
+### Run as iOS Development Build (recommended to get Apple Health data for syncing)
 
 1. Generate native iOS files:
    ```bash
@@ -53,7 +53,7 @@ If app does not auto-connect, open by URL:
 exp://<YOUR_LOCAL_IP>:8081
 ```
 
-### Optional: Expo Go (UI-only)
+### Optional: Expo Go (UI-only, no Apple Health integration)
 
 Some native features (for example Apple Health/Calendar behavior) require a development build.
 
@@ -72,28 +72,29 @@ The current repository includes a frontend scaffold with a login screen and tabb
 ### Features
 
 🏋️ **Real-Time Activity Hub** - Check the live status and busyness of recreation facilities across campus:
-- Rec Center capacity and available equipment
-- Outdoor Adventure Center schedules
-- Sand volleyball courts and tennis court availability
-- Gym busy times
+- Rec Center, Outdoor Adventure Center, and various court capacity and trend insights to guide student decisions
+- Gym busy times and hours
 
-💬 **Social Events Platform** - Start and organize games with other students:
-- Create and discover events (basketball, soccer, hiking, etc.)
-- Built-in calendar integration
-- RSVP and participant tracking
-- Real-time messaging with event organizers and teammates
+💬 **Pickup and Social Events Platform** - Start and organize games with other students:
+- Create and discover events (basketball, soccer, tennis, etc.)
+- Built-in calendar integration that syncs with Apple Calendars
+- RSVP and participant tracking, including notifications that friends are attending a pickup game
 
-📊 **Activity Feed & Fitness Tracking** - Stay motivated and social:
+📊 **Activity Feed** - Stay motivated and social:
 - Share your workouts and activities
-- View in-app fitness progress snapshots
+- Upload an image of your pump, sweat, or gains
 - Follow friends and see what they're up to
-- Celebrate milestones together
+- Celebrate milestones together and comment on workouts
 
-🏆 **Club & Intramural Sports** - Find your team:
-- Browse UNL club and intramural sports teams
-- Team schedules and rosters
+🏆 **Club & Intramural Sport Teams** - Find your team:
+- Browse and join current club and intramural sports teams
+- View team schedules
 - Event information and registration
-- Connect with teammates
+
+❤️ **Personal Activity Hub** - Keep track of your health:
+- View your real-time scan-ins per campus facility
+- Sync with Apple Health to conveniently view step count, calories burned, and distance travelled
+- Personal profile with name, profile picture, and friends list that easily integrates into feed
 
 ---
 
@@ -118,7 +119,7 @@ The current repository includes a frontend scaffold with a login screen and tabb
 **Frontend:**
 - React Native with Expo
 - TypeScript
-- Platforms: iOS, Android, Web
+- Platforms: iOS
 
 **Backend:**
 - Node.js with Express
