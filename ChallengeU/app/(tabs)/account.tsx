@@ -7,11 +7,27 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Fonts, Colors } from '@/constants/theme';
 import { UserRoundPen, X } from 'lucide-react-native';
+import { useFocusEffect } from '@react-navigation/native';
 // chart library (run `expo install react-native-chart-kit react-native-svg`)
 // @ts-ignore - types may not be installed in the managed workspace
 import { LineChart } from 'react-native-chart-kit';
 import { useRouter } from 'expo-router';
 import { signOut } from '@/utils/auth';
+
+const HERBIE_FRIENDS_KEY = 'herbieFriends';
+const DEFAULT_HERBIE_FRIENDS = ['Vittoria', 'Lucy'];
+const FRIEND_PHOTOS: Record<string, string> = {
+  Vittoria: 'https://placecats.com/100/100',
+  Lucy: 'https://placecats.com/101/101',
+  //Sandi: 'https://placecats.com/102/102',
+  Landen: 'https://placecats.com/103/103',
+  Mia: 'https://placecats.com/104/104',
+  Dante: 'https://placecats.com/105/105',
+  Jake: 'https://placecats.com/106/106',
+  Kenny: 'https://placecats.com/107/107',
+  Ivan: 'https://placecats.com/108/108',
+  Judy: 'https://placecats.com/109/109',
+};
 
 let AppleHealthKit: any = null;
 try {
@@ -36,9 +52,26 @@ export default function AccountScreen() {
   const [historicalDistance, setHistoricalDistance] = useState<number[]>([]);
   const [historicalCalories, setHistoricalCalories] = useState<number[]>([]);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [friendNames, setFriendNames] = useState<string[]>(DEFAULT_HERBIE_FRIENDS);
   const [showFriends, setShowFriends] = useState(false);
   const [showCheckinsModal, setShowCheckinsModal] = useState(false);
   const router = useRouter();
+
+  const loadFriends = React.useCallback(async () => {
+    try {
+      const storedFriends = await AsyncStorage.getItem(HERBIE_FRIENDS_KEY);
+      if (storedFriends) {
+        const parsed = JSON.parse(storedFriends);
+        if (Array.isArray(parsed) && parsed.every((f) => typeof f === 'string')) {
+          setFriendNames(parsed);
+          return;
+        }
+      }
+    } catch {
+      // ignore storage parse/read errors and fall back to defaults
+    }
+    setFriendNames(DEFAULT_HERBIE_FRIENDS);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -46,8 +79,15 @@ export default function AccountScreen() {
       if (stored) setName(stored);
       const storedPhoto = await AsyncStorage.getItem('profilePicture');
       if (storedPhoto) setPhotoUri(storedPhoto);
+      loadFriends();
     })();
-  }, []);
+  }, [loadFriends]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadFriends();
+    }, [loadFriends])
+  );
 
   const disconnectFromHealth = () => {
     // clear metrics and revert state
@@ -163,19 +203,11 @@ export default function AccountScreen() {
     }
   };
 
-  // demo friend list
-  const friends = [
-    { id: 1, name: 'Vittoria', photo: 'https://placecats.com/100/100' },
-    { id: 2, name: 'Lucy', photo: 'https://placecats.com/101/101' },
-    { id: 3, name: 'Sandi', photo: 'https://placecats.com/102/102' },
-    { id: 4, name: 'Landen', photo: 'https://placecats.com/103/103' },
-    { id: 5, name: 'Mia', photo: 'https://placecats.com/104/104' },
-    { id: 6, name: 'Dante', photo: 'https://placecats.com/105/105' },
-    { id: 7, name: 'Jake', photo: 'https://placecats.com/106/106' },
-    { id: 8, name: 'Kenny', photo: 'https://placecats.com/107/107' },
-    { id: 9, name: 'Ivan', photo: 'https://placecats.com/108/108' },
-    { id: 10, name: 'Judy', photo: 'https://placecats.com/109/109' },
-  ];
+  const friends = friendNames.map((friendName, index) => ({
+    id: `${friendName}-${index}`,
+    name: friendName,
+    photo: FRIEND_PHOTOS[friendName] || `https://placecats.com/${120 + index}/${120 + index}`,
+  }));
 
   // demo checkins per facility (using capacity names)
   const checkins = [

@@ -26,13 +26,16 @@ type Workout = {
   comments?: Comment[];
 };
 
+const INITIAL_HERBIE_FRIENDS = ['Vittoria', 'Lucy'];
+const HERBIE_FRIENDS_KEY = 'herbieFriends';
+
 // Demo Herbie Husker post
 const DEMO_WORKOUT: Workout = {
   _id: 'demo-herbie',
   username: 'Vittoria',
   calories: 670,
-  date: new Date().toISOString(),
-  likes: 0,
+  date: new Date('2026-02-28T17:41:00').toISOString(),
+  likes: 5,
   imageUrl: require('../../assets/images/workout0img.png'),
   comments: [
     {
@@ -48,8 +51,8 @@ const DEMO_WORKOUT: Workout = {
  const DEMO_WORKOUT_LUCY: Workout = {
    _id: 'demo-lucy',
    username: 'Lucy',
-   calories: 520,
-   date: new Date(Date.now() - 3600000).toISOString(),
+   calories: 320,
+   date: new Date('2026-02-28T07:14:00').toISOString(),
    likes: 2,
    imageUrl: require('../../assets/images/workout1img.png'),
    comments: [],
@@ -60,7 +63,7 @@ const DEMO_WORKOUT: Workout = {
    _id: 'demo-sandi',
    username: 'Sandi',
    calories: 450,
-   date: new Date(Date.now() - 7200000).toISOString(),
+   date: new Date('2026-02-27T22:23:00').toISOString(),
    likes: 1,
    imageUrl: require('../../assets/images/workout2img.png'),
    comments: [],
@@ -68,6 +71,7 @@ const DEMO_WORKOUT: Workout = {
 
 export default function FeedScreen() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [herbieFriends, setHerbieFriends] = useState<string[]>(INITIAL_HERBIE_FRIENDS);
   const [demoCommentsByPostId, setDemoCommentsByPostId] = useState<Record<string, Comment[]>>({
     [DEMO_WORKOUT._id]: DEMO_WORKOUT.comments || [],
     [DEMO_WORKOUT_LUCY._id]: DEMO_WORKOUT_LUCY.comments || [],
@@ -144,9 +148,16 @@ export default function FeedScreen() {
     (async () => {
       try {
         const stored = await AsyncStorage.getItem('studentName');
+        const storedFriends = await AsyncStorage.getItem(HERBIE_FRIENDS_KEY);
         if (stored) {
           setUsername(stored);
           setCommentUsername(stored);
+        }
+        if (storedFriends) {
+          const parsed = JSON.parse(storedFriends);
+          if (Array.isArray(parsed) && parsed.every((f) => typeof f === 'string')) {
+            setHerbieFriends(parsed);
+          }
         }
       } catch (e) {
         // ignore
@@ -341,11 +352,26 @@ export default function FeedScreen() {
     }));
   };
 
+  const isHerbieFriend = (name: string) =>
+    herbieFriends.some((friend) => friend.toLowerCase() === name.toLowerCase());
+
+  const toggleHerbieFriend = (name: string) => {
+    setHerbieFriends((prev) => {
+      const isExisting = prev.some((friend) => friend.toLowerCase() === name.toLowerCase());
+      const next = isExisting
+        ? prev.filter((friend) => friend.toLowerCase() !== name.toLowerCase())
+        : [...prev, name];
+      AsyncStorage.setItem(HERBIE_FRIENDS_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  };
+
   const renderItem = ({ item }: { item: Workout }) => {
     const date = new Date(item.date);
     const itemState = feedState[item._id] || { likes: item.likes, liked: false };
     const likes = itemState.likes;
     const isCelebrated = itemState.liked;
+    const isFriend = isHerbieFriend(item.username);
     // For demo posts, use local demo comment state; for others, use item comments
     const comments = item._id in demoCommentsByPostId
       ? demoCommentsByPostId[item._id] || []
@@ -356,6 +382,11 @@ export default function FeedScreen() {
           <Image source={typeof item.imageUrl === 'string' ? { uri: item.imageUrl } : item.imageUrl} style={styles.workoutImage} />
         )}
         <ThemedText type="subtitle">{item.username} completed a workout!</ThemedText>
+        <TouchableOpacity onPress={() => toggleHerbieFriend(item.username)}>
+          <ThemedText style={[styles.friendStatusText, !isFriend && styles.addFriendText]}>
+            {isFriend ? 'Your Friend' : 'Add Friend'}
+          </ThemedText>
+        </TouchableOpacity>
         <View style={styles.row}>
           <ThemedText>{item.calories} Calories</ThemedText>
           <ThemedText style={styles.date}>{date.toLocaleString()}</ThemedText>
@@ -366,14 +397,14 @@ export default function FeedScreen() {
             onPress={() => celebrateWorkout(item._id)}
           >
             <Heart
-              size={18}
+              size={14}
               color="#e80e0e"
               fill={isCelebrated ? '#e80e0e' : 'none'}
             />
-            <ThemedText style={styles.celebrateText}>
+            <ThemedText numberOfLines={1} style={styles.celebrateText}>
               {isCelebrated ? 'Celebrated' : 'Celebrate'}
             </ThemedText>
-            <ThemedText style={styles.likeCount}>{likes}</ThemedText>
+            <ThemedText numberOfLines={1} style={styles.likeCount}>{likes}</ThemedText>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.commentBtn}
@@ -757,6 +788,16 @@ const styles = StyleSheet.create({
   commentCount: {
     fontSize: 14,
     fontWeight: '700',
+    color: '#e80e0e',
+  },
+  friendStatusText: {
+    marginTop: 6,
+    marginBottom: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+  },
+  addFriendText: {
     color: '#e80e0e',
   },
   commentsPreview: {
