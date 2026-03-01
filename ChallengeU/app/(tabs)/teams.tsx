@@ -86,10 +86,10 @@ export default function TeamsScreen() {
   const selectedDayGames = selectedDay ? allCalendarGames.filter((game) => game.day === selectedDay) : [];
 
   const displayMonthDate = React.useMemo(() => {
-    const simulated = new Date();
-    simulated.setMonth(simulated.getMonth() + 1);
-    simulated.setDate(1);
-    return simulated;
+    const marchDate = new Date();
+    marchDate.setMonth(2);
+    marchDate.setDate(1);
+    return marchDate;
   }, []);
 
   const year = displayMonthDate.getFullYear();

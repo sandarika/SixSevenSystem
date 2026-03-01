@@ -532,7 +532,6 @@ export default function AccountScreen() {
       </TouchableOpacity>
 
       <ThemedText style={styles.statusLabel}>Health:</ThemedText>
-      <ThemedText style={styles.status}>{healthStatus}</ThemedText>
       <View style={{ height: 12 }} />
       {calories !== null && (
         <ThemedText style={styles.metric}>
