@@ -1,8 +1,30 @@
-# Welcome to your Expo app 👋
+# ChallengeU
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+ChallengeU is a mobile app for campus recreation: finding meetups, tracking team games on a calendar, and connecting with activity communities.
 
-## Get started
+## Features
+
+- Capacity + activity view for recreation spaces
+- Meetup feed with like-to-calendar flow
+- Teams calendar with joined team games + liked meetup events
+- iOS Apple Calendar sync for liked meetups and joined team games
+
+## Judge Testing on Phone
+
+### Important notes
+
+- For full feature testing (calendar sync), use a custom iOS development build (not Expo Go).
+- Expo Go can run core UI, but native calendar behavior may be limited.
+
+### Option A (recommended): iPhone with full native features
+
+Prerequisites:
+
+- Mac with Xcode
+- iPhone connected by USB for first install, trusted device
+- Same Wi-Fi network for Mac and iPhone after install
+
+Steps:
 
 1. Install dependencies
 
@@ -10,41 +32,52 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. Generate iOS native project
 
    ```bash
-   npx expo start
+   npx expo prebuild --platform ios
    ```
 
-In the output, you'll find options to open the app in a
+3. Install app on iPhone
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+   ```bash
+   npx expo run:ios --device
+   ```
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+4. Start Metro for dev client (keep this terminal open)
 
-## Get a fresh project
+   ```bash
+   lsof -ti :8081 | xargs kill -9 2>/dev/null || true
+   npx expo start --dev-client --host lan --port 8081 --clear
+   ```
 
-When you're ready, run:
+5. Open the installed ChallengeU app on iPhone.
+
+If the app does not auto-connect:
+
+- Shake phone → open dev menu → open by URL
+- Use: `exp://<your-mac-local-ip>:8081`
+
+### Option B: Quick UI-only check with Expo Go
 
 ```bash
-npm run reset-project
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Scan QR with Expo Go.
 
-## Learn more
+## Apple Calendar Verification (iOS)
 
-To learn more about developing your project with Expo, look at the following resources:
+1. Open Meetup tab and like an event.
+2. Open Teams tab and join a team.
+3. Confirm events are added to Apple Calendar.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Project Scripts
 
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npm run start
+npm run ios
+npm run android
+npm run web
+npm run lint
+```

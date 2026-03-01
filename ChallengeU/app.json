@@ -13,8 +13,15 @@
       "infoPlist": {
         "NSCalendarsUsageDescription": "ChallengeU uses your calendar to add liked meetups and joined team games.",
         "NSCalendarsFullAccessUsageDescription": "ChallengeU uses your calendar to add liked meetups and joined team games.",
-        "NSCalendarsWriteOnlyAccessUsageDescription": "ChallengeU uses your calendar to add liked meetups and joined team games."
-      }
+        "NSCalendarsWriteOnlyAccessUsageDescription": "ChallengeU uses your calendar to add liked meetups and joined team games.",
+        "ReactNativeReleaseLevel": "canary",
+        "NSHealthShareUsageDescription": "ChallengeU reads your steps, distance, and active energy to show fitness progress.",
+        "NSHealthUpdateUsageDescription": "ChallengeU does not write health data, but iOS requires this permission key for HealthKit access."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true
+      },
+      "bundleIdentifier": "com.lsalyer.ChallengeU"
     },
     "android": {
       "adaptiveIcon": {

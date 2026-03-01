@@ -57,7 +57,7 @@ The current repository includes a frontend scaffold with a login screen and tabb
 
 📊 **Activity Feed & Fitness Tracking** - Stay motivated and social:
 - Share your workouts and activities
-- Sync with popular fitness trackers
+- View in-app fitness progress snapshots
 - Follow friends and see what they're up to
 - Celebrate milestones together
 

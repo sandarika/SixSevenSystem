@@ -6,6 +6,7 @@ type TeamGame = {
   opponent: string;
   date: string;
   location: string;
+  day?: number;
 };
 
 type MeetupCalendarInput = {
@@ -50,23 +51,62 @@ async function canUseAppleCalendar(): Promise<boolean> {
     return false;
   }
 
-  const { status } = await Calendar.requestCalendarPermissionsAsync();
-  return status === 'granted';
+  const existing = await Calendar.getCalendarPermissionsAsync();
+  if (existing.status === 'granted') {
+    return true;
+  }
+
+  const requested = await Calendar.requestCalendarPermissionsAsync();
+  return requested.status === 'granted';
 }
 
 async function getWritableCalendarId(): Promise<string | null> {
+  const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+
   try {
     const defaultCalendar = await Calendar.getDefaultCalendarAsync();
-    if (defaultCalendar?.id) {
+    if (defaultCalendar?.id && defaultCalendar.allowsModifications) {
       return defaultCalendar.id;
     }
   } catch {
     // fallback below
   }
 
-  const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
   const writable = calendars.find((calendar) => calendar.allowsModifications);
-  return writable?.id ?? null;
+  if (writable?.id) {
+    return writable.id;
+  }
+
+  if (Platform.OS !== 'ios') {
+    return null;
+  }
+
+  const existingSource =
+    calendars.find((calendar) => calendar.source?.type === Calendar.SourceType.LOCAL)?.source ??
+    calendars.find((calendar) => !!calendar.source)?.source;
+
+  const source: any = existingSource ?? { isLocalAccount: true, name: 'ChallengeU' };
+
+  const payload: any = {
+    title: 'ChallengeU',
+    color: '#e80e0e',
+    entityType: Calendar.EntityTypes.EVENT,
+    source,
+    name: 'ChallengeU',
+    ownerAccount: 'personal',
+    accessLevel: Calendar.CalendarAccessLevel.OWNER,
+  };
+
+  if (source?.id) {
+    payload.sourceId = source.id;
+  }
+
+  try {
+    const createdCalendarId = await Calendar.createCalendarAsync(payload);
+    return createdCalendarId;
+  } catch {
+    return null;
+  }
 }
 
 function parseTimeString(time: string): { hour24: number; minute: number } | null {
@@ -102,18 +142,31 @@ function buildMeetupDate(dateKey: string, time: string): Date | null {
   return new Date(year, month - 1, day, parsedTime.hour24, parsedTime.minute, 0, 0);
 }
 
-function buildTeamGameDate(weekdayAndTime: string): Date | null {
+function buildTeamGameDate(weekdayAndTime: string, day?: number): Date | null {
   const match = weekdayAndTime.trim().match(/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+(.+)$/i);
   if (!match) {
     return null;
   }
 
-  const weekday = match[1].slice(0, 3).toLowerCase();
   const time = match[2];
   const parsedTime = parseTimeString(time);
   if (!parsedTime) {
     return null;
   }
+
+  const now = new Date();
+
+  if (typeof day === 'number' && Number.isInteger(day) && day > 0 && day <= 31) {
+    const candidate = new Date(now.getFullYear(), now.getMonth(), day, parsedTime.hour24, parsedTime.minute, 0, 0);
+
+    if (candidate <= now) {
+      candidate.setMonth(candidate.getMonth() + 1);
+    }
+
+    return candidate;
+  }
+
+  const weekday = match[1].slice(0, 3).toLowerCase();
 
   const weekdayMap: Record<string, number> = {
     sun: 0,
@@ -125,7 +178,6 @@ function buildTeamGameDate(weekdayAndTime: string): Date | null {
     sat: 6,
   };
 
-  const now = new Date();
   const currentWeekday = now.getDay();
   const targetWeekday = weekdayMap[weekday];
   let dayOffset = (targetWeekday - currentWeekday + 7) % 7;
@@ -142,15 +194,15 @@ function buildTeamGameDate(weekdayAndTime: string): Date | null {
   return candidate;
 }
 
-async function upsertCalendarEvent(mappingKey: string, details: CalendarEventInput): Promise<void> {
+async function upsertCalendarEvent(mappingKey: string, details: CalendarEventInput): Promise<boolean> {
   const allowed = await canUseAppleCalendar();
   if (!allowed) {
-    return;
+    return false;
   }
 
   const calendarId = await getWritableCalendarId();
   if (!calendarId) {
-    return;
+    return false;
   }
 
   const map = await getEventMap();
@@ -159,7 +211,7 @@ async function upsertCalendarEvent(mappingKey: string, details: CalendarEventInp
   if (existingEventId) {
     try {
       await Calendar.updateEventAsync(existingEventId, details);
-      return;
+      return true;
     } catch {
       // If event no longer exists, fall through to create a new one.
     }
@@ -167,6 +219,7 @@ async function upsertCalendarEvent(mappingKey: string, details: CalendarEventInp
 
   const createdEventId = await Calendar.createEventAsync(calendarId, details);
   await setEventMap({ ...map, [mappingKey]: createdEventId });
+  return true;
 }
 
 async function removeCalendarEvent(mappingKey: string): Promise<void> {
@@ -220,37 +273,45 @@ export async function syncJoinedTeamGamesToAppleCalendar(
   teamName: string,
   sport: string,
   games: TeamGame[],
-): Promise<void> {
+): Promise<boolean> {
   try {
+    let syncedCount = 0;
+
     await Promise.all(
       games.map(async (game, index) => {
-        const startDate = buildTeamGameDate(game.date);
+        const startDate = buildTeamGameDate(game.date, game.day);
         if (!startDate) {
           return;
         }
 
         const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
-        await upsertCalendarEvent(`team-${teamName}-${index}`, {
+        const synced = await upsertCalendarEvent(`team-${teamName}-${game.opponent}-${game.date}-${index}`, {
           title: `${teamName} vs ${game.opponent}`,
           location: game.location,
           notes: `Sport: ${sport} (added from ChallengeU Teams)`,
           startDate,
           endDate,
         });
+
+        if (synced) {
+          syncedCount += 1;
+        }
       }),
     );
+
+    return syncedCount > 0;
   } catch {
-    return;
+    return false;
   }
 }
 
 export async function removeJoinedTeamGamesFromAppleCalendar(
   teamName: string,
-  gamesCount: number,
+  games: TeamGame[],
 ): Promise<void> {
   try {
     await Promise.all(
-      Array.from({ length: gamesCount }, (_, index) => removeCalendarEvent(`team-${teamName}-${index}`)),
+      games.map((game, index) => removeCalendarEvent(`team-${teamName}-${game.opponent}-${game.date}-${index}`)),
     );
   } catch {
     return;

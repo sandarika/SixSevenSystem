@@ -2,6 +2,8 @@ import React from 'react';
 import { StyleSheet, TouchableOpacity, Button, Modal, TextInput, ScrollView } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Calendar, Plus, X } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
@@ -19,7 +21,11 @@ type MeetupPost = {
   liked: boolean;
   gender: string;
   postDate: string;
+  signedUpUsers: string[];
 };
+
+const HERBIE_FRIENDS_KEY = 'herbieFriends';
+const DEFAULT_HERBIE_FRIENDS = ['Vittoria', 'Lucy'];
 
 export default function EventsScreen() {
   const getDateKey = (date: Date) => {
@@ -44,11 +50,12 @@ export default function EventsScreen() {
   // fake social posts
   const [posts, setPosts] = React.useState<MeetupPost[]>(
     [
-      { id: 1, sport: 'Basketball', location: 'Rec Center Courts', time: '5:00 PM', likes: 2, liked: false, gender: 'COED', postDate: todayKey },
-      { id: 2, sport: 'Soccer', location: 'Outdoor Fields', time: '6:30 PM', likes: 5, liked: false, gender: 'Mens', postDate: todayKey },
-      { id: 3, sport: 'Tennis', location: 'East Campus Courts', time: '4:15 PM', likes: 1, liked: false, gender: 'Womens', postDate: todayKey },
+      { id: 1, sport: 'Basketball', location: 'Rec Center Courts', time: '5:00 PM', likes: 2, liked: false, gender: 'COED', postDate: todayKey, signedUpUsers: ['Vittoria', 'Kenny'] },
+      { id: 2, sport: 'Soccer', location: 'Outdoor Fields', time: '6:30 PM', likes: 5, liked: false, gender: 'Mens', postDate: todayKey, signedUpUsers: ['Alex', 'Jordan'] },
+      { id: 3, sport: 'Tennis', location: 'East Campus Courts', time: '4:15 PM', likes: 1, liked: false, gender: 'Womens', postDate: todayKey, signedUpUsers: ['Lucy'] },
     ],
   );
+  const [friendNames, setFriendNames] = React.useState<string[]>(DEFAULT_HERBIE_FRIENDS);
 
   // filter state
   const [sportFilter, setSportFilter] = React.useState('');
@@ -84,9 +91,35 @@ export default function EventsScreen() {
     { label: 'This evening', filters: { time: '5' } },
   ];
 
+  const loadFriends = React.useCallback(async () => {
+    try {
+      const storedFriends = await AsyncStorage.getItem(HERBIE_FRIENDS_KEY);
+      if (storedFriends) {
+        const parsed = JSON.parse(storedFriends);
+        if (Array.isArray(parsed) && parsed.every((friend) => typeof friend === 'string')) {
+          setFriendNames(parsed);
+          return;
+        }
+      }
+    } catch {
+      // ignore storage read/parse issues and keep defaults
+    }
+    setFriendNames(DEFAULT_HERBIE_FRIENDS);
+  }, []);
+
   React.useEffect(() => {
     setPosts((prevPosts) => prevPosts.filter((post) => post.postDate === todayKey));
   }, [todayKey]);
+
+  React.useEffect(() => {
+    void loadFriends();
+  }, [loadFriends]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void loadFriends();
+    }, [loadFriends])
+  );
 
   const todaysPosts = React.useMemo(
     () => posts.filter((post) => post.postDate === todayKey),
@@ -150,6 +183,7 @@ export default function EventsScreen() {
       likes: 0,
       liked: false,
       postDate: todayKey,
+      signedUpUsers: [],
     };
     setPosts([...posts, newPost]);
     setFormData({ sport: '', location: '', time: '', gender: 'COED' });
@@ -326,7 +360,12 @@ export default function EventsScreen() {
       )}
 
       <ThemedView style={styles.postList}>
-        {filteredPosts.map((post) => (
+        {filteredPosts.map((post) => {
+          const matchingFriends = post.signedUpUsers.filter((name) =>
+            friendNames.some((friend) => friend.toLowerCase() === name.toLowerCase())
+          );
+
+          return (
           <ThemedView key={post.id} style={styles.postCard}>
             <ThemedText type="subtitle" style={styles.postTitle}>
               {sportEmoji[post.sport] ?? '🏅'} {post.sport} - {post.gender}
@@ -336,13 +375,22 @@ export default function EventsScreen() {
               <ThemedText style={styles.detailText}>Where: {post.location}</ThemedText>
               <ThemedText style={styles.detailText}>When: {post.time}</ThemedText>
             </ThemedView>
-            <TouchableOpacity onPress={() => toggleLike(post.id)} style={styles.likeButton}>
-              <ThemedText style={styles.likeText}>
-                {post.liked ? '❤️' : '🤍'} {post.likes}
-              </ThemedText>
-            </TouchableOpacity>
+            <ThemedView style={styles.likeRow}>
+              <TouchableOpacity onPress={() => toggleLike(post.id)} style={styles.likeButton}>
+                <ThemedText style={styles.likeText}>
+                  {post.liked ? '❤️' : '🤍'} {post.likes}
+                </ThemedText>
+              </TouchableOpacity>
+              {matchingFriends.length > 0 && (
+                <ThemedText style={styles.friendSignupText}>
+                  {matchingFriends.length === 1
+                    ? `${matchingFriends[0]} is going to this event`
+                    : `${matchingFriends.length} friends are going`}
+                </ThemedText>
+              )}
+            </ThemedView>
           </ThemedView>
-        ))}
+        )})}
       </ThemedView>
     </ParallaxScrollView>
 
@@ -568,12 +616,24 @@ const styles = StyleSheet.create({
     // keep default text color (no tint or background change)
   },
   likeButton: {
-    marginTop: 8,
+    marginTop: 6,
     alignSelf: 'flex-start',
+  },
+  likeRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    backgroundColor: '#fff',
   },
   likeText: {
     fontSize: 16,
     color: '#e80e0e',
+  },
+  friendSignupText: {
+    color: '#555',
+    fontSize: 13,
   },
   fab: {
     position: 'absolute',

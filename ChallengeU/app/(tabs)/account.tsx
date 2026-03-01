@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, Platform, StyleSheet, Image, TouchableOpacity, Modal, ScrollView, Dimensions } from 'react-native';
+import { View, Text, Button, Platform, StyleSheet, Image, TouchableOpacity, Modal, ScrollView, Dimensions, NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -14,44 +14,33 @@ import { LineChart } from 'react-native-chart-kit';
 import { useRouter } from 'expo-router';
 import { signOut } from '@/utils/auth';
 
-const HERBIE_FRIENDS_KEY = 'herbieFriends';
-const HERBIE_DEFAULT_NOTIFICATION_SENT_KEY = 'herbieDefaultNotificationSent';
-const DEFAULT_HERBIE_FRIENDS = ['Vittoria', 'Lucy'];
-const DEFAULT_HERBIE_NOTIFICATION = {
-  id: 'herbie-default-notification',
-  title: 'Wednesday Workout!',
-  body: 'You typically go to the gym at 5pm on Wednesdays. We predict it will be 30% less busy than usual today!',
-  read: false,
-};
-const FRIEND_PHOTOS: Record<string, string> = {
-  Vittoria: 'https://placecats.com/100/100',
-  Lucy: 'https://placecats.com/101/101',
-  //Sandi: 'https://placecats.com/102/102',
-  Landen: 'https://placecats.com/103/103',
-  Mia: 'https://placecats.com/104/104',
-  Dante: 'https://placecats.com/105/105',
-  Jake: 'https://placecats.com/106/106',
-  Kenny: 'https://placecats.com/107/107',
-  Ivan: 'https://placecats.com/108/108',
-  Judy: 'https://placecats.com/109/109',
+const HEALTH_SEED_STORAGE_KEY = 'health_seed_steps_imported_feb2026_v1';
+const HEALTH_SEED_STEPS: Array<{ date: string; steps: number }> = require('@/assets/health-seed-steps.json');
+
+const resolveAppleHealthKit = () => {
+  try {
+    // optional native module; will be undefined in Expo managed without dev client / native install
+    // npm: react-native-health (requires native setup and HealthKit entitlement)
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const healthModule = require('react-native-health');
+    const moduleFromPackage = healthModule?.default ?? healthModule;
+    if (moduleFromPackage?.initHealthKit) {
+      return moduleFromPackage;
+    }
+  } catch {
+    // fallback to direct native module lookups below
+  }
+
+  const nativeModuleCandidates = [
+    NativeModules?.AppleHealthKit,
+    NativeModules?.RCTAppleHealthKit,
+    NativeModules?.RNAppleHealthKit,
+  ];
+
+  return nativeModuleCandidates.find((candidate) => candidate?.initHealthKit) ?? null;
 };
 
-const runtimeRequire: ((moduleName: string) => any) | undefined =
-  typeof globalThis !== 'undefined' && typeof (globalThis as { require?: unknown }).require === 'function'
-    ? ((globalThis as { require: (name: string) => any }).require)
-    : undefined;
-
-let AppleHealthKit: any = null;
-let Notifications: any = null;
-try {
-  // optional native module; will be undefined in Expo managed without dev client / native install
-  // npm: react-native-health (requires native setup and HealthKit entitlement)
-  // This file only requests read permissions (no write).
-  // If not installed the UI will show not available.
-  AppleHealthKit = runtimeRequire ? runtimeRequire('react-native-health') : null;
-} catch {
-  AppleHealthKit = null;
-}
+let AppleHealthKit: any = resolveAppleHealthKit();
 
 try {
   // optional module; if unavailable, in-app notifications list still works
@@ -64,14 +53,17 @@ export default function AccountScreen() {
   const [name, setName] = useState<string>('Student');
   const [healthStatus, setHealthStatus] = useState<string>('Not connected');
   const [connected, setConnected] = useState<boolean>(false);
+  const [healthAvailable, setHealthAvailable] = useState<boolean>(Platform.OS === 'ios' && !!AppleHealthKit?.initHealthKit);
   const [stepCount, setStepCount] = useState<number | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
   const [calories, setCalories] = useState<number | null>(null);
+  const [stepsDateLabel, setStepsDateLabel] = useState<string | null>(null);
+  const [distanceDateLabel, setDistanceDateLabel] = useState<string | null>(null);
+  const [caloriesDateLabel, setCaloriesDateLabel] = useState<string | null>(null);
   const [historicalSteps, setHistoricalSteps] = useState<number[]>([]);
   const [historicalDistance, setHistoricalDistance] = useState<number[]>([]);
   const [historicalCalories, setHistoricalCalories] = useState<number[]>([]);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
-  const [friendNames, setFriendNames] = useState<string[]>(DEFAULT_HERBIE_FRIENDS);
   const [showFriends, setShowFriends] = useState(false);
   const [showCheckinsModal, setShowCheckinsModal] = useState(false);
   const [notifications, setNotifications] = useState([DEFAULT_HERBIE_NOTIFICATION]);
@@ -79,37 +71,24 @@ export default function AccountScreen() {
   const router = useRouter();
   const unreadNotificationCount = notifications.filter((notification) => !notification.read).length;
 
-  const loadFriends = React.useCallback(async () => {
-    try {
-      const storedFriends = await AsyncStorage.getItem(HERBIE_FRIENDS_KEY);
-      if (storedFriends) {
-        const parsed = JSON.parse(storedFriends);
-        if (Array.isArray(parsed) && parsed.every((f) => typeof f === 'string')) {
-          setFriendNames(parsed);
-          return;
-        }
-      }
-    } catch {
-      // ignore storage parse/read errors and fall back to defaults
-    }
-    setFriendNames(DEFAULT_HERBIE_FRIENDS);
-  }, []);
-
   useEffect(() => {
     (async () => {
       const stored = await AsyncStorage.getItem('studentName');
       if (stored) setName(stored);
       const storedPhoto = await AsyncStorage.getItem('profilePicture');
       if (storedPhoto) setPhotoUri(storedPhoto);
-      loadFriends();
-    })();
-  }, [loadFriends]);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      loadFriends();
-    }, [loadFriends])
-  );
+      if (Platform.OS === 'ios' && AppleHealthKit?.isAvailable) {
+        AppleHealthKit.isAvailable((err: any, available: boolean) => {
+          if (err || !available) {
+            setHealthAvailable(false);
+            return;
+          }
+          setHealthAvailable(true);
+        });
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!Notifications?.setNotificationHandler) return;
@@ -177,93 +156,282 @@ export default function AccountScreen() {
     setStepCount(null);
     setDistance(null);
     setCalories(null);
+    setStepsDateLabel(null);
+    setDistanceDateLabel(null);
+    setCaloriesDateLabel(null);
     setHistoricalSteps([]);
     setHistoricalDistance([]);
     setHistoricalCalories([]);
   };
 
+  const refreshHealthData = (windowDays: number = 7) => {
+    if (!AppleHealthKit) {
+      return;
+    }
+
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const rangeStart = new Date(now.getTime() - Math.max(windowDays, 1) * 24 * 60 * 60 * 1000).toISOString();
+    const headlineStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const rangeOptions = { startDate: rangeStart, endDate: nowIso };
+    const headlineOptions = { startDate: headlineStart, endDate: nowIso };
+
+    const estimateMilesFromSteps = (steps: number) => Number((steps / 2000).toFixed(2));
+    const estimateCaloriesFromSteps = (steps: number) => Math.round(steps * 0.04);
+    const formatDateLabel = (isoDate: string) => {
+      const date = new Date(isoDate);
+      if (Number.isNaN(date.getTime())) {
+        return isoDate;
+      }
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    const seededRows = [...HEALTH_SEED_STEPS]
+      .filter((row) => Number(row?.steps ?? 0) > 0)
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+    if (seededRows.length > 0) {
+      const latestSeeded = seededRows[seededRows.length - 1];
+      const latestLabel = formatDateLabel(`${latestSeeded.date}T12:00:00`);
+      const seededWindow = seededRows.slice(-Math.max(windowDays, 1));
+
+      setStepCount(latestSeeded.steps);
+      setStepsDateLabel(latestLabel);
+
+      setDistance(estimateMilesFromSteps(latestSeeded.steps));
+      setDistanceDateLabel(latestLabel);
+
+      setCalories(estimateCaloriesFromSteps(latestSeeded.steps));
+      setCaloriesDateLabel(latestLabel);
+
+      setHistoricalSteps(seededWindow.map((row) => row.steps));
+      setHistoricalDistance(seededWindow.map((row) => estimateMilesFromSteps(row.steps)));
+      setHistoricalCalories(seededWindow.map((row) => estimateCaloriesFromSteps(row.steps)));
+      return;
+    }
+
+    const getActiveEnergySamples = (
+      queryOptions: { startDate: string; endDate: string },
+      callback: (error: any, samples: any[]) => void,
+    ) => {
+      const fn =
+        AppleHealthKit?.getActiveEnergyBurned ??
+        AppleHealthKit?.getActiveEnergyBurnedSamples;
+
+      if (typeof fn !== 'function') {
+        callback('ActiveEnergyBurned method unavailable', []);
+        return;
+      }
+
+      fn(queryOptions, (sampleError: any, samples: any) => {
+        callback(sampleError, Array.isArray(samples) ? samples : []);
+      });
+    };
+
+    AppleHealthKit.getDailyStepCountSamples(headlineOptions, (error: any, steps: any) => {
+      if (!error && Array.isArray(steps)) {
+        const latestStepSample = [...steps]
+          .sort((a: any, b: any) => String(a?.startDate ?? '').localeCompare(String(b?.startDate ?? '')))
+          .reverse()
+          .find((item: any) => Number(item?.value ?? 0) > 0);
+
+        if (latestStepSample != null) {
+          setStepCount(Math.round(Number(latestStepSample?.value ?? 0)));
+          setStepsDateLabel(formatDateLabel(String(latestStepSample?.startDate ?? '')));
+          return;
+        }
+
+        setStepCount(0);
+        setStepsDateLabel(null);
+      }
+    });
+
+    AppleHealthKit.getDailyDistanceWalkingRunningSamples(headlineOptions, (error: any, distances: any) => {
+      if (!error && Array.isArray(distances)) {
+        const latestDistanceSample = [...distances]
+          .sort((a: any, b: any) => String(a?.startDate ?? '').localeCompare(String(b?.startDate ?? '')))
+          .reverse()
+          .find((item: any) => Number(item?.value ?? 0) > 0);
+
+        if (latestDistanceSample != null) {
+          setDistance(Number(Number(latestDistanceSample?.value ?? 0).toFixed(2)));
+          setDistanceDateLabel(formatDateLabel(String(latestDistanceSample?.startDate ?? '')));
+          return;
+        }
+
+        AppleHealthKit.getDailyStepCountSamples(headlineOptions, (stepError: any, steps: any) => {
+          if (!stepError && Array.isArray(steps)) {
+            const latestStepSample = [...steps]
+              .sort((a: any, b: any) => String(a?.startDate ?? '').localeCompare(String(b?.startDate ?? '')))
+              .reverse()
+              .find((item: any) => Number(item?.value ?? 0) > 0);
+
+            if (latestStepSample != null) {
+              setDistance(estimateMilesFromSteps(Number(latestStepSample?.value ?? 0)));
+              setDistanceDateLabel(formatDateLabel(String(latestStepSample?.startDate ?? '')));
+              return;
+            }
+
+            setDistance(0);
+            setDistanceDateLabel(null);
+          }
+        });
+      }
+    });
+
+    AppleHealthKit.getDailyStepCountSamples(headlineOptions, (stepError: any, steps: any) => {
+      if (!stepError && Array.isArray(steps)) {
+        const latestStepSample = [...steps]
+          .sort((a: any, b: any) => String(a?.startDate ?? '').localeCompare(String(b?.startDate ?? '')))
+          .reverse()
+          .find((item: any) => Number(item?.value ?? 0) > 0);
+
+        if (latestStepSample) {
+          const stepValue = Number(latestStepSample?.value ?? 0);
+          setCalories(estimateCaloriesFromSteps(stepValue));
+          setCaloriesDateLabel(formatDateLabel(String(latestStepSample?.startDate ?? '')));
+          return;
+        }
+      }
+
+      setCalories(0);
+      setCaloriesDateLabel(null);
+    });
+
+    AppleHealthKit.getDailyStepCountSamples(rangeOptions, (error: any, steps: any) => {
+      if (!error && Array.isArray(steps)) {
+        const values = steps.map((item: any) => Number(item?.value ?? 0)).slice(-windowDays);
+        setHistoricalSteps(values);
+
+      }
+    });
+
+    AppleHealthKit.getDailyDistanceWalkingRunningSamples(rangeOptions, (error: any, distances: any) => {
+      if (!error && Array.isArray(distances)) {
+        const values = distances.map((item: any) => Number(item?.value ?? 0)).slice(-windowDays);
+        setHistoricalDistance(values);
+        return;
+      }
+
+      AppleHealthKit.getDailyStepCountSamples(rangeOptions, (stepError: any, steps: any) => {
+        if (!stepError && Array.isArray(steps)) {
+          const values = steps
+            .map((item: any) => estimateMilesFromSteps(Number(item?.value ?? 0)))
+            .slice(-windowDays);
+          setHistoricalDistance(values);
+          return;
+        }
+
+        setHistoricalDistance([]);
+      });
+    });
+
+    AppleHealthKit.getDailyStepCountSamples(rangeOptions, (stepError: any, steps: any) => {
+      if (!stepError && Array.isArray(steps)) {
+        const values = steps
+          .map((item: any) => estimateCaloriesFromSteps(Number(item?.value ?? 0)))
+          .slice(-windowDays);
+        setHistoricalCalories(values);
+        return;
+      }
+
+      setHistoricalCalories([]);
+    });
+  };
+
   const connectToHealth = async () => {
+    AppleHealthKit = resolveAppleHealthKit();
+
     if (Platform.OS !== 'ios') {
       setHealthStatus('HealthKit only available on iOS');
       return;
     }
     if (!AppleHealthKit || !AppleHealthKit.initHealthKit) {
-      // expo go or no native install: pretend we're connected with dummy values
-      setHealthStatus('Connected');
-      setConnected(true);
-      setStepCount(6234);
-      setDistance(1.8);
-      setCalories(220);
-      // mock history
-      setHistoricalSteps([5067, 6000, 7090, 8000, 9000, 4000, 3200]);
-      setHistoricalDistance([1.2, 1.5, 2.0, 2.1, 1.8, 1.3, 1.0]);
-      setHistoricalCalories([180, 200, 220, 210, 230, 190, 170]);
+      setHealthStatus('Apple Health native module unavailable. Rebuild iOS app after prebuild and ensure Health capability is enabled.');
+      setConnected(false);
+      setHealthAvailable(false);
       return;
+    }
+
+    const permissionsConstants = AppleHealthKit?.Constants?.Permissions;
+    const readPermissions = [
+      permissionsConstants?.StepCount ?? 'StepCount',
+      permissionsConstants?.DistanceWalkingRunning ?? 'DistanceWalkingRunning',
+      permissionsConstants?.ActiveEnergyBurned ?? 'ActiveEnergyBurned',
+    ];
+
+    if (AppleHealthKit?.isAvailable) {
+      AppleHealthKit.isAvailable((availabilityError: any, available: boolean) => {
+        if (availabilityError || !available) {
+          const details = availabilityError?.message || availabilityError || 'HealthKit not available on this device.';
+          setHealthStatus(`Apple Health unavailable: ${String(details)}`);
+          setConnected(false);
+          setHealthAvailable(false);
+          return;
+        }
+        setHealthAvailable(true);
+      });
     }
 
     const permissions = {
       permissions: {
-        read: [
-          'StepCount',
-          'DistanceWalkingRunning',
-          'ActiveEnergyBurned',
-          // add other read types as needed
-        ],
-        // no write permissions requested
+        read: readPermissions,
+        write: [permissionsConstants?.StepCount ?? 'StepCount'],
       },
     };
 
     AppleHealthKit.initHealthKit(permissions, (err: any) => {
       if (err) {
-        setHealthStatus('Permission denied or init error');
+        const details = err?.message || err || 'Unknown HealthKit init error';
+        setHealthStatus(`Apple Health init failed: ${String(details)}`);
         setConnected(false);
         return;
       }
       setHealthStatus('Connected (read permissions granted)');
       setConnected(true);
-
-      // read a sample step count for today
-      const options = { startDate: new Date(new Date().setHours(0,0,0,0)).toISOString(), endDate: new Date().toISOString() };
-      AppleHealthKit.getStepCount(options, (err2: any, results: any) => {
-        if (!err2 && results?.value != null) {
-          setStepCount(results.value);
-        }
-      });
-      // also try other metrics if available
-      AppleHealthKit.getDistanceWalkingRunning(options, (err3: any, dist: any) => {
-        if (!err3 && dist?.value != null) {
-          setDistance(dist.value);
-        }
-      });
-      // active energy (calories) samples may return array - grab total or last
-      AppleHealthKit.getActiveEnergyBurnedSamples(options, (err4: any, cal: any) => {
-        if (!err4 && Array.isArray(cal) && cal.length > 0) {
-          const last = cal[cal.length - 1];
-          if (last?.value != null) setCalories(last.value);
-        }
-      });
-      // fetch last week of daily totals
-      const weekOptions = {
-        startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-        endDate: new Date().toISOString(),
-      };
-      AppleHealthKit.getDailyStepCountSamples(weekOptions, (err5: any, steps: any) => {
-        if (!err5 && Array.isArray(steps)) {
-          // map array to just values sorted by date
-          setHistoricalSteps(steps.map((s: any) => s.value));
-        }
-      });
-      AppleHealthKit.getDailyDistanceWalkingRunningSamples(weekOptions, (err6: any, dists: any) => {
-        if (!err6 && Array.isArray(dists)) {
-          setHistoricalDistance(dists.map((d: any) => d.value));
-        }
-      });
-      AppleHealthKit.getDailyActiveEnergyBurnedSamples(weekOptions, (err7: any, cals: any) => {
-        if (!err7 && Array.isArray(cals)) {
-          setHistoricalCalories(cals.map((c: any) => c.value));
-        }
-      });
+      void importSeedDataToHealth();
+      refreshHealthData(7);
     });
+  };
+
+  const importSeedDataToHealth = async () => {
+    if (Platform.OS !== 'ios' || !AppleHealthKit?.saveSteps) {
+      setHealthStatus('Unable to import seed data on this device/runtime.');
+      return;
+    }
+
+    const alreadyImported = await AsyncStorage.getItem(HEALTH_SEED_STORAGE_KEY);
+    if (alreadyImported) {
+      setHealthStatus('Seed data already imported into Apple Health.');
+      refreshHealthData(30);
+      return;
+    }
+
+    let importedCount = 0;
+
+    for (const row of HEALTH_SEED_STEPS) {
+      await new Promise<void>((resolve) => {
+        AppleHealthKit.saveSteps(
+          {
+            value: row.steps,
+            startDate: `${row.date}T00:00:00.000Z`,
+            endDate: `${row.date}T23:59:59.000Z`,
+            metadata: { HKWasUserEntered: true },
+          } as any,
+          (saveError: any) => {
+            if (!saveError) {
+              importedCount += 1;
+            }
+            resolve();
+          },
+        );
+      });
+    }
+
+    await AsyncStorage.setItem(HEALTH_SEED_STORAGE_KEY, '1');
+    setHealthStatus(`Imported ${importedCount} days of steps into Apple Health`);
+    refreshHealthData(30);
   };
 
   const pickImage = async () => {
@@ -284,11 +452,19 @@ export default function AccountScreen() {
     }
   };
 
-  const friends = friendNames.map((friendName, index) => ({
-    id: `${friendName}-${index}`,
-    name: friendName,
-    photo: FRIEND_PHOTOS[friendName] || `https://placecats.com/${120 + index}/${120 + index}`,
-  }));
+  // demo friend list
+  const friends = [
+    { id: 1, name: 'Vittoria', photo: 'https://placecats.com/100/100' },
+    { id: 2, name: 'Lucy', photo: 'https://placecats.com/101/101' },
+    { id: 3, name: 'Sandi', photo: 'https://placecats.com/102/102' },
+    { id: 4, name: 'Landen', photo: 'https://placecats.com/103/103' },
+    { id: 5, name: 'Mia', photo: 'https://placecats.com/104/104' },
+    { id: 6, name: 'Dante', photo: 'https://placecats.com/105/105' },
+    { id: 7, name: 'Jake', photo: 'https://placecats.com/106/106' },
+    { id: 8, name: 'Kenny', photo: 'https://placecats.com/107/107' },
+    { id: 9, name: 'Ivan', photo: 'https://placecats.com/108/108' },
+    { id: 10, name: 'Judy', photo: 'https://placecats.com/109/109' },
+  ];
 
   // demo checkins per facility (using capacity names)
   const checkins = [
@@ -350,27 +526,42 @@ export default function AccountScreen() {
       <ThemedText style={styles.status}>{healthStatus}</ThemedText>
       <View style={{ height: 12 }} />
       {calories !== null && (
-        <ThemedText style={styles.metric}>Calories burned: {calories}</ThemedText>
+        <ThemedText style={styles.metric}>
+          Daily calories burned{caloriesDateLabel ? ` (${caloriesDateLabel})` : ''}: {calories}
+        </ThemedText>
       )}
       {historicalCalories.length > 0 && (
         <LineChart
           data={{
-            labels: historicalCalories.map((_, i) => `${i + 1}`),
+            labels: historicalCalories.map((_, i) => (i % 2 === 0 ? `${i + 1}` : '')),
             datasets: [{ data: historicalCalories }],
           }}
           width={Dimensions.get('window').width - 40}
           height={220}
+          fromZero
+          withVerticalLabels
+          withHorizontalLabels
+          withDots
+          withInnerLines
+          withVerticalLines={false}
+          withOuterLines={false}
+          segments={3}
           chartConfig={{
             backgroundColor: Colors.light.background,
             backgroundGradientFrom: Colors.light.background,
             backgroundGradientTo: Colors.light.background,
             decimalPlaces: 0,
-            color: (opacity = 1) => `rgba(232,14,14, ${opacity})`,
-            labelColor: (opacity = 1) => `rgba(0,0,0, ${opacity})`,
+            color: (opacity = 1) => `rgba(232,14,14, ${opacity * 0.9})`,
+            labelColor: (opacity = 1) => `rgba(0,0,0, ${Math.max(opacity, 0.7)})`,
+            fillShadowGradientFrom: 'rgba(232,14,14,0.05)',
+            fillShadowGradientTo: 'rgba(232,14,14,0.005)',
+            fillShadowGradientFromOpacity: 0.16,
+            fillShadowGradientToOpacity: 0.03,
             style: { borderRadius: 16 },
-            propsForDots: { r: '4', strokeWidth: '2', stroke: 'rgba(232,14,14,1)' },
+            propsForDots: { r: '5', strokeWidth: '0.5', stroke: 'rgba(232,14,14,1)', fill: 'rgba(232,14,14,1)' },
+            propsForBackgroundLines: { stroke: 'rgba(232,14,14,0.20)', strokeWidth: 1, strokeDasharray: '6 10' },
           }}
-          style={{ marginVertical: 8, borderRadius: 16 }}
+          style={{ marginVertical: 8, borderRadius: 16, paddingRight: 8 }}
         />
       )}
       {stepCount !== null && (
@@ -379,22 +570,35 @@ export default function AccountScreen() {
       {historicalSteps.length > 0 && (
         <LineChart
           data={{
-            labels: historicalSteps.map((_, i) => `${i + 1}`),
+            labels: historicalSteps.map((_, i) => (i % 2 === 0 ? `${i + 1}` : '')),
             datasets: [{ data: historicalSteps }],
           }}
           width={Dimensions.get('window').width - 40}
           height={220}
+          fromZero
+          withVerticalLabels
+          withHorizontalLabels
+          withDots
+          withInnerLines
+          withVerticalLines={false}
+          withOuterLines={false}
+          segments={3}
           chartConfig={{
             backgroundColor: Colors.light.background,
             backgroundGradientFrom: Colors.light.background,
             backgroundGradientTo: Colors.light.background,
             decimalPlaces: 0,
-            color: (opacity = 1) => `rgba(14,14,232, ${opacity})`,
-            labelColor: (opacity = 1) => `rgba(0,0,0, ${opacity})`,
+            color: (opacity = 1) => `rgba(14,14,232, ${opacity * 0.9})`,
+            labelColor: (opacity = 1) => `rgba(0,0,0, ${Math.max(opacity, 0.7)})`,
+            fillShadowGradientFrom: 'rgba(14,14,232,0.05)',
+            fillShadowGradientTo: 'rgba(14,14,232,0.005)',
+            fillShadowGradientFromOpacity: 0.16,
+            fillShadowGradientToOpacity: 0.03,
             style: { borderRadius: 16 },
-            propsForDots: { r: '4', strokeWidth: '2', stroke: 'rgba(14,14,232,1)' },
+            propsForDots: { r: '5', strokeWidth: '0.5', stroke: 'rgba(14,14,232,1)', fill: 'rgba(14,14,232,1)' },
+            propsForBackgroundLines: { stroke: 'rgba(14,14,232,0.20)', strokeWidth: 1, strokeDasharray: '6 10' },
           }}
-          style={{ marginVertical: 8, borderRadius: 16 }}
+          style={{ marginVertical: 8, borderRadius: 16, paddingRight: 8 }}
         />
       )}
       {distance !== null && (
@@ -403,29 +607,45 @@ export default function AccountScreen() {
       {historicalDistance.length > 0 && (
         <LineChart
           data={{
-            labels: historicalDistance.map((_, i) => `${i + 1}`),
+            labels: historicalDistance.map((_, i) => (i % 2 === 0 ? `${i + 1}` : '')),
             datasets: [{ data: historicalDistance }],
           }}
           width={Dimensions.get('window').width - 40}
           height={220}
+          fromZero
+          withVerticalLabels
+          withHorizontalLabels
+          withDots
+          withInnerLines
+          withVerticalLines={false}
+          withOuterLines={false}
+          segments={3}
           chartConfig={{
             backgroundColor: Colors.light.background,
             backgroundGradientFrom: Colors.light.background,
             backgroundGradientTo: Colors.light.background,
             decimalPlaces: 2,
-            color: (opacity = 1) => `rgba(16,119,16, ${opacity})`,
-            labelColor: (opacity = 1) => `rgba(0,0,0, ${opacity})`,
+            color: (opacity = 1) => `rgba(16,119,16, ${opacity * 0.9})`,
+            labelColor: (opacity = 1) => `rgba(0,0,0, ${Math.max(opacity, 0.7)})`,
+            fillShadowGradientFrom: 'rgba(16,119,16,0.045)',
+            fillShadowGradientTo: 'rgba(16,119,16,0.005)',
+            fillShadowGradientFromOpacity: 0.16,
+            fillShadowGradientToOpacity: 0.03,
             style: { borderRadius: 16 },
-            propsForDots: { r: '4', strokeWidth: '2', stroke: 'rgb(16, 119, 16)' },
+            propsForDots: { r: '5', strokeWidth: '0.5', stroke: 'rgb(16, 119, 16)', fill: 'rgb(16, 119, 16)' },
+            propsForBackgroundLines: { stroke: 'rgba(16,119,16,0.20)', strokeWidth: 1, strokeDasharray: '6 10' },
           }}
-          style={{ marginVertical: 8, borderRadius: 16 }}
+          style={{ marginVertical: 8, borderRadius: 16, paddingRight: 8 }}
         />
       )}
       
       <Button
-        title={connected ? 'Disconnect Health' : 'Connect to Health'}
+        title={connected ? 'Disconnect Apple Health' : 'Connect to Apple Health'}
         onPress={connected ? disconnectFromHealth : connectToHealth}
       />
+      {!healthAvailable && Platform.OS === 'ios' && (
+        <ThemedText style={styles.status}>Tip: use an iOS development build to enable Apple Health.</ThemedText>
+      )}
       
       <View style={{ height: 24 }} />
       <Button
