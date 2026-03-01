@@ -149,6 +149,17 @@ export default function ActivityScreen() {
           const isOpen = expandedIndex === idx;
           const currentIntervalIdx = getCurrentIntervalIndex(f.timeLabels, currentMinutes);
           const hourLabels = getHourLabels(f.timeLabels, f.hourLabelShift ?? 0);
+          const actualBusyPct = Math.round((f.current / f.capacity) * 100);
+          const usualBusyPct = currentIntervalIdx >= 0
+            ? f.distribution[currentIntervalIdx]
+            : Math.round(
+                f.distribution.reduce((sum, value) => sum + value, 0) /
+                  Math.max(1, f.distribution.length)
+              );
+          const busyDelta = actualBusyPct - usualBusyPct;
+          const busyComparedText = busyDelta === 0
+            ? 'As busy as usual this hour'
+            : `${Math.abs(busyDelta)}% ${busyDelta > 0 ? 'more' : 'less'} busy than usual this hour`;
           return (
             <ThemedView key={idx} style={styles.card}>
               <TouchableOpacity onPress={() => setExpandedIndex(isOpen ? null : idx)}>
@@ -156,9 +167,7 @@ export default function ActivityScreen() {
                   {f.name} {isOpen ? '▲' : '▼'}
                 </ThemedText>
               </TouchableOpacity>
-              <ThemedText style={styles.status}>
-                {Math.round((f.current / f.capacity) * 100)}% busy
-              </ThemedText>
+              <ThemedText style={styles.status}>{busyComparedText}</ThemedText>
               {isOpen && (
                 <ThemedView style={styles.details}>
                   <TouchableOpacity onPress={() => setExpandedSportsIndex(expandedSportsIndex === idx ? null : idx)}>
