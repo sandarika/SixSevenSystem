@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity } from 'react-native';
+import { Alert, StyleSheet, TouchableOpacity } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useFocusEffect } from '@react-navigation/native';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
@@ -85,17 +85,50 @@ export default function TeamsScreen() {
   const gameDays = new Set(allCalendarGames.map((game) => game.day));
   const selectedDayGames = selectedDay ? allCalendarGames.filter((game) => game.day === selectedDay) : [];
 
+  const displayMonthDate = React.useMemo(() => {
+    const simulated = new Date();
+    simulated.setMonth(simulated.getMonth() + 1);
+    simulated.setDate(1);
+    return simulated;
+  }, []);
+
+  const year = displayMonthDate.getFullYear();
+  const monthIndex = displayMonthDate.getMonth();
+  const monthName = displayMonthDate.toLocaleString('en-US', { month: 'long' });
+
+  const syncAllJoinedTeamsToCalendar = React.useCallback(async () => {
+    if (myTeams.length === 0) {
+      return;
+    }
+
+    const results = await Promise.all(
+      myTeams.map(async (teamName) => {
+        const matchedTeam = intramuralTeams.find((team) => team.name === teamName);
+        if (!matchedTeam) {
+          return true;
+        }
+
+        const gamesForTeam = teamGames[teamName] ?? [];
+        return syncJoinedTeamGamesToAppleCalendar(teamName, matchedTeam.sport, gamesForTeam);
+      }),
+    );
+
+    if (results.some((synced) => !synced)) {
+      Alert.alert(
+        'Calendar Sync Failed',
+        'Could not add one or more team games to Apple Calendar. Check iPhone Settings > ChallengeU > Calendars and verify the ChallengeU calendar is enabled in Apple Calendar.',
+      );
+    }
+  }, [myTeams]);
+
   useFocusEffect(
     React.useCallback(() => {
       let isMounted = true;
 
       const loadLikedMeetupEvents = async () => {
         const events = await getLikedMeetupEvents();
-        const now = new Date();
-        const currentMonth = now.getMonth();
-        const currentYear = now.getFullYear();
         const currentMonthEvents = events.filter(
-          (event) => event.month === currentMonth && event.year === currentYear,
+          (event) => event.month === monthIndex && event.year === year,
         );
 
         if (isMounted) {
@@ -104,23 +137,27 @@ export default function TeamsScreen() {
       };
 
       loadLikedMeetupEvents();
+      void syncAllJoinedTeamsToCalendar();
 
       return () => {
         isMounted = false;
       };
-    }, []),
+    }, [monthIndex, syncAllJoinedTeamsToCalendar, year]),
   );
 
-  const currentMonthDate = new Date();
-  const year = currentMonthDate.getFullYear();
-  const monthIndex = currentMonthDate.getMonth();
-  const monthName = currentMonthDate.toLocaleString('en-US', { month: 'long' });
+  React.useEffect(() => {
+    void syncAllJoinedTeamsToCalendar();
+  }, [syncAllJoinedTeamsToCalendar]);
+
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const firstWeekday = new Date(year, monthIndex, 1).getDay();
   const weekdayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  const totalCellsWithoutTrailing = firstWeekday + daysInMonth;
+  const trailingEmptyCells = (7 - (totalCellsWithoutTrailing % 7)) % 7;
   const calendarCells = [
     ...Array.from({ length: firstWeekday }, () => null),
     ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+    ...Array.from({ length: trailingEmptyCells }, () => null),
   ];
 
   const formatDayWithOrdinal = (day: number) => {
@@ -141,7 +178,7 @@ export default function TeamsScreen() {
     }
   };
 
-  const handleJoinTeam = (teamName: string) => {
+  const handleJoinTeam = async (teamName: string) => {
     const alreadyJoined = myTeams.includes(teamName);
     if (alreadyJoined) {
       return;
@@ -158,15 +195,22 @@ export default function TeamsScreen() {
     });
 
     if (matchedTeam) {
-      void syncJoinedTeamGamesToAppleCalendar(teamName, matchedTeam.sport, gamesForTeam);
+      const synced = await syncJoinedTeamGamesToAppleCalendar(teamName, matchedTeam.sport, gamesForTeam);
+      if (!synced) {
+        Alert.alert(
+          'Calendar Sync Failed',
+          'Could not add team games to Apple Calendar. Check iPhone Settings > ChallengeU > Calendars and verify the ChallengeU calendar is enabled in Apple Calendar.',
+        );
+      }
     }
 
     setIsJoinExpanded(false);
   };
 
   const handleLeaveTeam = (teamName: string) => {
+    const gamesForTeam = teamGames[teamName] ?? [];
     setMyTeams((prevTeams) => prevTeams.filter((name) => name !== teamName));
-    void removeJoinedTeamGamesFromAppleCalendar(teamName, (teamGames[teamName] ?? []).length);
+    void removeJoinedTeamGamesFromAppleCalendar(teamName, gamesForTeam);
     setIsJoinExpanded(true);
   };
 
